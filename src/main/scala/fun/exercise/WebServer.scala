@@ -3,34 +3,31 @@ package fun.exercise
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
-import com.vividsolutions.jts.geom.Coordinate
-import fun.exercise.model._
 import fun.exercise.repository.InMemoryVehicleRepository
 import fun.exercise.service.{TopologicalMapService, VehicleTracker, VehiclesService}
+import io.circe.generic.auto._
+import io.circe.syntax._
+
+import scala.sys.exit
 
 object WebServer {
-  val squareNetwork: NetworkMap = NetworkMap(
-    nodes = Map(
-      (1, new Coordinate(0, 0)),
-      (2, new Coordinate(10, 0)),
-      (3, new Coordinate(0, 10)),
-      (4, new Coordinate(10, 10))
-    ),
-    segments = List(
-      Segment(1, 3),
-      Segment(3, 4),
-      Segment(4, 2),
-      Segment(2, 1)
-    )
-  )
+  val mapPath = "src/main/resources/lc-track0-21781.geojson"
 
   val vehicleStorage        = new InMemoryVehicleRepository
-  val tracker               = new VehicleTracker(vehicleStorage, squareNetwork)
   val topologicalMapService = new TopologicalMapService(vehicleStorage)
+
+  topologicalMapService.init(mapPath) match {
+    case Left(err) =>
+      println(err.msg)
+      exit(1)
+    case Right(_) =>
+  }
+
+  val tracker = new VehicleTracker(vehicleStorage, topologicalMapService.networkMap)
 
   val service = Behaviors.setup[Unit] { context =>
     tracker.initConsumer(context)
-    VehiclesService(squareNetwork, vehicleCount = 3)(tracker.consumer)
+    VehiclesService(topologicalMapService.networkMap, vehicleCount = 3)(tracker.consumer)
   }
 
   val route = {
@@ -38,7 +35,7 @@ object WebServer {
     concat(
       path("map") {
         get {
-          complete(topologicalMapService.getTopologicalMap.toString) //TODO MANUEL hacer esto JSON
+          complete(topologicalMapService.getTopologicalMap.asJson.toString)
         }
       },
       path("eta") {

@@ -5,12 +5,11 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import com.vividsolutions.jts.algorithm.CGAlgorithms3D.distance
 import com.vividsolutions.jts.geom.{Coordinate, LineSegment}
 import fun.exercise.model.TopologicalMap.Vehicle
-import fun.exercise.model.{NetworkMap, Segment, VehicleMessage}
+import fun.exercise.model.{NetworkMap, Segment, VehicleMessage, VehicleNotInSegmentError}
 import fun.exercise.repository.VehicleRepository
 
-//TODO esto como class no me mola mucho
 class VehicleTracker(storage: VehicleRepository, network: NetworkMap) {
-
+  val tolerance: Double                  = 1
   var consumer: ActorRef[VehicleMessage] = _
 
   val linearSegments: Seq[(LineSegment, Segment)] =
@@ -31,17 +30,19 @@ class VehicleTracker(storage: VehicleRepository, network: NetworkMap) {
   }
 
   def onMessageReceived(message: VehicleMessage): Unit = {
-    val segment: (LineSegment, Segment) = segmentForVehicle(message.coordinate)
-    val name                            = message.name
-    val position: Double                = positionForVehicle(message.coordinate, segment._1)
-    val vehicle: Vehicle                = Vehicle(segment._2, name, position)
+    val (name, coordinate)                           = (message.name, message.coordinate)
+    val maybeSegment: Option[(LineSegment, Segment)] = segmentForVehicle(message.coordinate)
+    val segment                                      = maybeSegment.getOrElse(throw VehicleNotInSegmentError(name, coordinate))
+    val position: Double                             = positionForVehicle(coordinate, segment._1)
+    val vehicle: Vehicle                             = Vehicle(segment._2, name, position)
+
     storage.storeVehicle(vehicle)
 
     println(message.name, message.coordinate, s"stored vehicle $vehicle")
   }
 
-  def segmentForVehicle(vehiclePosition: Coordinate): (LineSegment, Segment) =
-    linearSegments.find(elem => elem._1.distance(vehiclePosition) == 0).get //TODO .get peligro
+  def segmentForVehicle(vehiclePosition: Coordinate): Option[(LineSegment, Segment)] =
+    linearSegments.find(elem => elem._1.distance(vehiclePosition) < tolerance)
 
   def positionForVehicle(vehiclePosition: Coordinate, segment: LineSegment): Double =
     distance(vehiclePosition, segment.p0) / distance(segment.p0, segment.p1)

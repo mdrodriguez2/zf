@@ -2,7 +2,7 @@ package fun.exercise.service
 
 import com.vividsolutions.jts.algorithm.CGAlgorithms3D.distance
 import fun.exercise.model.TopologicalMap.{SegmentSize, StationID, StationName}
-import fun.exercise.model.{NetworkMap, Segment, TopologicalMap}
+import fun.exercise.model._
 import fun.exercise.repository.VehicleRepository
 import io.circe.parser.parse
 
@@ -10,23 +10,25 @@ import java.nio.file.{Files, Paths}
 
 class TopologicalMapService(vehicleRepository: VehicleRepository) {
 
-  val mapPath = "src/main/resources/lc-track0-21781.geojson"
+  var networkMap: NetworkMap                = _
+  var stations: Map[StationID, StationName] = _
+  var segments: List[SegmentSize]           = _
 
-  def getTopologicalMap: TopologicalMap = {
-    val networkMap: NetworkMap                = parseNetworkMap(mapPath)
-    val stations: Map[StationID, StationName] = extractStations(networkMap)
-    val segments: List[SegmentSize]           = extractSegments(networkMap)
-    val vehicles                              = vehicleRepository.getAll
-    TopologicalMap(stations, segments, vehicles)
-  }
+  def init(mapPath: String): Either[AppError, Unit] =
+    parseNetworkMap(mapPath).map { network =>
+      networkMap = network
+      stations   = extractStations(networkMap)
+      segments   = extractSegments(networkMap)
+    }
 
-  private def parseNetworkMap(path: String): NetworkMap = {
-    val res = for {
+  def getTopologicalMap: TopologicalMap =
+    TopologicalMap(stations, segments, vehicleRepository.getAll)
+
+  private def parseNetworkMap(path: String): Either[AppError, NetworkMap] =
+    (for {
       json <- parse(Files.readString(Paths.get(path)))
       map  <- NetworkParser.toNetworkMap(json)
-    } yield map
-    res.right.get
-  }
+    } yield map).left.map(error => MapCannotBeParsed(path, error.getMessage))
 
   private[service] def extractStations(networkMap: NetworkMap): Map[StationID, StationName] =
     networkMap.nodes.map(node => (node._1, s"${node._2.x}-${node._2.y}"))
@@ -39,8 +41,6 @@ class TopologicalMapService(vehicleRepository: VehicleRepository) {
     normalizedSegments
   }
 
-  //TODO this method is unsafe, crashes if the segment origin is not in the network map
   private[service] def segmentSize(segment: Segment, networkMap: NetworkMap): SegmentSize =
     SegmentSize(segment, distance(networkMap.nodes(segment.origin), networkMap.nodes(segment.destination)))
-
 }

@@ -1,17 +1,14 @@
 package fun.exercise.repository
 
-import com.vividsolutions.jts.geom.Coordinate
-import fun.exercise.model.VehicleMessage.VehicleName
+import fun.exercise.model.TopologicalMap.Vehicle
 
 import scala.collection.mutable
 
 class InMemoryVehicleRepository extends VehicleRepository {
 
-  val vehiclePosition = new mutable.HashMap[String, Coordinate]()
+  val vehiclePosition = new mutable.HashMap[String, Vehicle]()
 
+  override def storeVehicle(vehicle: Vehicle): Unit = vehiclePosition.put(vehicle.name, vehicle)
 
-  override def storeVehicle(name: VehicleName, coordinate: Coordinate): Unit = vehiclePosition.put(name, coordinate)
-
-  //TODO is this the best return type?
-  override def getAll: Seq[(VehicleName, Coordinate)] = vehiclePosition.iterator.toSeq
+  override def getAll: List[Vehicle] = vehiclePosition.values.toList
 }

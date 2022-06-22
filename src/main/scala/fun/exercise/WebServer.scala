@@ -5,10 +5,11 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import com.vividsolutions.jts.geom.Coordinate
 import fun.exercise.model._
-import service.VehiclesService
+import fun.exercise.repository.InMemoryVehicleRepository
+import fun.exercise.service.{TopologicalMapService, VehicleTracker, VehiclesService}
 
 object WebServer {
-  val squareNetwork = NetworkMap(
+  val squareNetwork: NetworkMap = NetworkMap(
     nodes = Map(
       (1, new Coordinate(0, 0)),
       (2, new Coordinate(10, 0)),
@@ -23,27 +24,33 @@ object WebServer {
     )
   )
 
+  val vehicleStorage        = new InMemoryVehicleRepository
+  val tracker               = new VehicleTracker(vehicleStorage, squareNetwork)
+  val topologicalMapService = new TopologicalMapService(vehicleStorage)
+
   val service = Behaviors.setup[Unit] { context =>
-    val consumer =
-      context.spawn[VehicleMessage](
-        Behaviors.receiveMessage(message => {
-          println(message.name, message.coordinate)
-          Behaviors.same
-        }),
-        "consumer"
-      )
-    VehiclesService(squareNetwork, vehicleCount = 3)(consumer)
+    tracker.initConsumer(context)
+    VehiclesService(squareNetwork, vehicleCount = 3)(tracker.consumer)
   }
 
   val route = {
     import akka.http.scaladsl.server.Directives._
-    pathSingleSlash {
-      get {
-        complete {
-          "Hello world"
+    concat(
+      path("map") {
+        get {
+          complete(topologicalMapService.getTopologicalMap.toString) //TODO MANUEL hacer esto JSON
+        }
+      },
+      path("eta") {
+        get {
+          parameters(Symbol("vehicle").as[String]) { vehicle =>
+            complete {
+              s"ETA for requested vehicle $vehicle for all stations"
+            }
+          }
         }
       }
-    }
+    )
   }
 
   def main(args: Array[String]) {

@@ -1,10 +1,9 @@
 package fun.exercise.repository
 
-import com.vividsolutions.jts.geom.Coordinate
-import fun.exercise.model.VehicleMessage.VehicleName
+import fun.exercise.model.TopologicalMap.Vehicle
 
 trait VehicleRepository {
-  def storeVehicle(name: VehicleName, coordinate: Coordinate): Unit
+  def storeVehicle(vehicle: Vehicle): Unit
 
-  def getAll: Seq[(VehicleName, Coordinate)]
+  def getAll: List[Vehicle]
 }
